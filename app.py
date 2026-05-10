@@ -127,14 +127,26 @@ def make_card_news(keyword, thread_text):
 
     draw.rounded_rectangle((50, 50, 1030, 1300), radius=42, fill=(28, 30, 42))
 
-    draw.text((90, 100), "생활 메모", fill=(210, 210, 210), font=small_font)
+        draw.text((90, 100), "생활 메모", fill=(210, 210, 210), font=small_font)
+
     draw.text((90, 180), keyword, fill=(255, 255, 255), font=title_font)
 
     wrapped = textwrap.fill(thread_text, width=18)
-    draw.text((90, 360), wrapped, fill=(238, 238, 238), font=body_font, spacing=18)
 
-   draw.text((90, 1180), "나중에 참고하기 좋은 생활 아이디어", fill=(170, 170, 180), font=small_font)
+    draw.text(
+        (90, 360),
+        wrapped,
+        fill=(238, 238, 238),
+        font=body_font,
+        spacing=18
+    )
 
+    draw.text(
+        (90, 1180),
+        "나중에 참고하기 좋은 생활 아이디어",
+        fill=(170, 170, 180),
+        font=small_font
+    )
     buffer = io.BytesIO()
     img.save(buffer, format="PNG")
     buffer.seek(0)
