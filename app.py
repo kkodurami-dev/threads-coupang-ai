@@ -73,8 +73,7 @@ def make_coupang_deeplink(coupang_url):
 
 def make_thread_text(keyword):
 st.write(thread_text)
-    
-prompt = f"""
+    prompt = f"""
     당신은 Threads 바이럴 콘텐츠 전문가다.
 
     광고 느낌 없이
