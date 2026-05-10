@@ -72,26 +72,41 @@ def make_coupang_deeplink(coupang_url):
         return coupang_url
 
 def make_thread_text(keyword):
+
     prompt = f"""
-너는 한국 Threads에서 자연스럽게 확산되는 생활정보 글을 쓰는 전문가다.
+    당신은 Threads 바이럴 콘텐츠 전문가다.
 
-주제: {keyword}
+    광고 느낌 없이
+    실제 사용 후기처럼 자연스럽게 작성하라.
 
-조건:
-- 광고 느낌 금지
-- 존댓말 기반의 자연스러운 말투
-- 실제 사용 후기처럼 쓰되 너무 친한 반말 금지
-- 공감 + 궁금증 + 저장 욕구를 포함
-- 과장 금지
-- "사세요", "구매", "최저가", "인생템", "미쳤다" 금지
-- 링크 언급 금지
-- 90~150자
-- 이모지 사용 금지
-- 정보 공유 느낌으로 작성
+    조건:
+    - 2~3문장
+    - 공감형 말투
+    - 저장하고 싶은 느낌
+    - 광고 티 금지
+    - 과장 금지
+    - 짧고 가독성 좋게
+    - Threads 스타일
 
-예시 톤:
-자취할 때 이런 작은 정리용품 하나가 공간 활용을 꽤 바꿔줍니다. 물건을 한곳에 모아두기 쉬워져서 찾는 시간도 줄어드는 편입니다.
-"""
+    제품:
+    {keyword}
+    """
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        temperature=0.8,
+        max_tokens=120
+    )
+
+    text = response.choices[0].message.content
+
+    return str(text).strip()
 
 def get_korean_font(size):
     font_paths = [
