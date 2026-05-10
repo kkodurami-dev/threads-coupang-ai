@@ -1,368 +1,129 @@
-import io
-import hmac
-import hashlib
-import urllib.parse
-from datetime import datetime
-
-import requests
-import pandas as pd
 import streamlit as st
-
-from PIL import Image
-from PIL import ImageDraw
-from PIL import ImageFont
-
+import random
+import urllib.parse
 from openai import OpenAI
 
-# ----------------------------
-# API
-# ----------------------------
-
+# =========================
+# API KEY
+# =========================
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
-
-COUPANG_ACCESS_KEY = st.secrets["COUPANG_ACCESS_KEY"]
-COUPANG_SECRET_KEY = st.secrets["COUPANG_SECRET_KEY"]
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-COUPANG_DOMAIN = "https://api-gateway.coupang.com"
+# =========================
+# 자동 키워드 리스트
+# =========================
+AUTO_KEYWORDS = [
+    "차량용 꿀템",
+    "캠핑 꿀템",
+    "자취 꿀템",
+    "책상 정리 꿀템",
+    "LED 무드등",
+    "미니 청소기",
+    "무선 충전기",
+    "차박 꿀템",
+    "주방 신박템",
+    "욕실 꿀템",
+    "생활 편의템",
+    "수납 정리함",
+    "집들이 선물",
+    "직장인 책상템",
+    "겨울 난방템",
+    "여름 냉방템",
+    "핸드폰 거치대",
+    "블루투스 스피커",
+    "생활 아이디어 상품",
+    "다이소 감성템"
+]
 
-# ----------------------------
-# 쿠팡 인증
-# ----------------------------
-
-def make_coupang_auth(method, path):
-
-    now = datetime.utcnow().strftime("%y%m%dT%H%M%SZ")
-
-    message = now + method + path
-
-    signature = hmac.new(
-        COUPANG_SECRET_KEY.encode("utf-8"),
-        message.encode("utf-8"),
-        hashlib.sha256
-    ).hexdigest()
-
-    return (
-        f"CEA algorithm=HmacSHA256, "
-        f"access-key={COUPANG_ACCESS_KEY}, "
-        f"signed-date={now}, "
-        f"signature={signature}"
-    )
-
-# ----------------------------
-# 상품 검색
-# ----------------------------
-
-def search_coupang(keyword, limit=10):
-
+# =========================
+# 쿠팡 검색 URL 생성
+# =========================
+def make_coupang_search_url(keyword):
     encoded = urllib.parse.quote(keyword)
+    return f"https://www.coupang.com/np/search?q={encoded}"
 
-    path = f"/v2/providers/affiliate_open_api/apis/openapi/products/search?keyword={encoded}&limit={limit}"
+# =========================
+# AI 스레드 문구 생성
+# =========================
+def make_thread_text(keyword, url):
 
-    url = COUPANG_DOMAIN + path
-
-    headers = {
-        "Authorization": make_coupang_auth("GET", path),
-        "Content-Type": "application/json"
-    }
-
-    try:
-
-        response = requests.get(
-            url,
-            headers=headers,
-            timeout=10
-        )
-
-        data = response.json()
-
-        products = data.get(
-            "data",
-            {}
-        ).get(
-            "productData",
-            []
-        )
-
-        results = []
-
-        for p in products:
-
-            results.append({
-                "title": p.get("productName", ""),
-                "price": p.get("productPrice", ""),
-                "url": p.get("productUrl", ""),
-                "image_url": p.get("productImage", "")
-            })
-
-        return results
-
-    except:
-
-        return []
-
-# ----------------------------
-# 신박템 점수
-# ----------------------------
-
-def novelty_score(title):
-
-    words = [
-        "미니",
-        "무선",
-        "휴대용",
-        "접이식",
-        "차량용",
-        "LED",
-        "수납",
-        "거치대",
-        "캠핑",
-        "충전",
-        "멀티",
-        "정리",
-        "자동",
-    ]
-
-    score = 0
-
-    title = str(title)
-
-    for w in words:
-
-        if w in title:
-            score += 10
-
-    if len(title) <= 40:
-        score += 10
-
-    return score
-
-# ----------------------------
-# AI 후킹 생성
-# ----------------------------
-
-def make_copy(product):
-
-    title = product["title"]
-
-    prompt = f"""
-너는 한국 Threads에서 활동하는
-신박한 꿀템 계정 운영자다.
-
-상품:
-{title}
+    prompt = f'''
+다음 키워드 기반으로
+스레드 바이럴 스타일 글 작성.
 
 조건:
+- 초반 후킹 강하게
+- 짧고 중독성 있게
+- 실제 후기 느낌
+- 이모지 적당히 사용
+- 마지막에 클릭 유도
+- 120자 이내
 
-1. 광고처럼 보이면 안 된다.
-2. 첫 문장은 강한 후킹.
-3. 저장하고 싶은 느낌.
-4. 짧고 중독성 있게.
-5. 마지막은:
-'링크는 댓글에 남겨둘게요.'
-로 끝내라.
-"""
+키워드:
+{keyword}
 
-    try:
+링크:
+{url}
+'''
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        )
-
-        return response.choices[0].message.content
-
-    except:
-
-        return f"""
-이거 왜 이제 알았지…
-
-{title}
-
-은근 만족감 높은 스타일.
-
-링크는 댓글에 남겨둘게요.
-"""
-
-# ----------------------------
-# 이미지 다운로드
-# ----------------------------
-
-def download_image(url):
-
-    try:
-
-        response = requests.get(url)
-
-        img = Image.open(
-            io.BytesIO(response.content)
-        ).convert("RGB")
-
-        return img
-
-    except:
-
-        return None
-
-# ----------------------------
-# 폰트
-# ----------------------------
-
-def get_font(size):
-
-    try:
-
-        return ImageFont.truetype(
-            "arial.ttf",
-            size
-        )
-
-    except:
-
-        return ImageFont.load_default()
-
-# ----------------------------
-# 카드뉴스 생성
-# ----------------------------
-
-def create_card(product):
-
-    width = 1080
-    height = 1350
-
-    bg = Image.new(
-        "RGB",
-        (width, height),
-        (20,20,20)
+    response = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=[
+            {"role": "user", "content": prompt}
+        ]
     )
 
-    draw = ImageDraw.Draw(bg)
+    return response.choices[0].message.content
 
-    title = str(product["title"])[:30]
-
-    font_big = get_font(60)
-    font_small = get_font(42)
-
-    draw.text(
-        (80,100),
-        "🧲 삶의 질 꿀템",
-        fill=(255,215,0),
-        font=font_big
-    )
-
-    draw.text(
-        (80,240),
-        title,
-        fill=(255,255,255),
-        font=font_small
-    )
-
-    img = download_image(
-        product["image_url"]
-    )
-
-    if img:
-
-        img.thumbnail((700,700))
-
-        x = (width - img.width)//2
-
-        bg.paste(
-            img,
-            (x,450)
-        )
-
-    return bg
-
-# ----------------------------
-# 화면
-# ----------------------------
-
+# =========================
+# 페이지 UI
+# =========================
 st.set_page_config(
     page_title="AI 신박템 생성기",
+    page_icon="🔥",
     layout="centered"
 )
 
 st.title("🔥 AI 신박템 생성기")
 
-default_keywords = """
-차량용 꿀템
-캠핑 꿀템
-자취 꿀템
-책상 정리 꿀템
-LED 무드등
-미니 청소기
-"""
+st.write("버튼만 누르면 AI가 자동으로 오늘의 신박템 스레드 글 생성")
 
-keywords = st.text_area(
-    "키워드 입력",
-    default_keywords,
-    height=180
+count = st.slider(
+    "자동 생성 개수",
+    1,
+    10,
+    5
 )
 
-limit = st.slider(
-    "키워드당 상품 수",
-    3,
-    20,
-    10
-)
+# =========================
+# 생성 버튼
+# =========================
+if st.button("🚀 오늘의 신박템 자동 생성"):
 
-if st.button("🚀 생성 시작"):
+    selected_keywords = random.sample(AUTO_KEYWORDS, count)
 
-    all_products = []
+    for keyword in selected_keywords:
 
-    with st.spinner("상품 수집 중..."):
+        url = make_coupang_search_url(keyword)
 
-        for keyword in keywords.splitlines():
+        try:
+            text = make_thread_text(keyword, url)
+        except:
+            text = f"🔥 요즘 난리난 {keyword}\n\n👉 {url}"
 
-            keyword = keyword.strip()
+        st.divider()
 
-            if keyword:
+        st.subheader(f"🔥 {keyword}")
 
-                all_products.extend(
-                    search_coupang(
-                        keyword,
-                        limit
-                    )
-                )
-
-    if not all_products:
-
-        st.warning("상품 없음")
-
-    else:
-
-        df = pd.DataFrame(all_products)
-
-        df["score"] = df["title"].apply(
-            novelty_score
+        st.text_area(
+            "스레드 업로드용 글",
+            text,
+            height=170
         )
 
-        df = df.sort_values(
-            "score",
-            ascending=False
-        )
+        st.code(url)
 
-        for i, row in enumerate(df.head(10).iterrows()):
+st.divider()
 
-            product = row[1].to_dict()
-
-            text = make_copy(product)
-
-            image = create_card(product)
-
-            st.image(image)
-
-            st.text_area(
-                f"본문 {i+1}",
-                text,
-                height=220
-            )
-
-            st.code(product["url"])
+st.caption("Threads + 쿠팡파트너스 자동화 시스템")
