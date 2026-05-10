@@ -123,11 +123,10 @@ if st.button("🚀 오늘의 신박템 자동 생성"):
         )
 
         st.text_area(
-            "댓글용 링크",
-            f"🔗 제품 정보
-{url}",
-            height=100
-        )
+    "댓글용 링크",
+    f"🔗 제품 정보\n{url}",
+    height=100
+)
 
 st.divider()
 
