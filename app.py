@@ -1,161 +1,188 @@
 import streamlit as st
 import random
+import urllib.parse
+import requests
+import hmac
+import hashlib
+import json
+import io
+import os
+import textwrap
+from datetime import datetime
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont
-import textwrap
-import os
-
-# =========================
-# API
-# =========================
 
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+COUPANG_ACCESS_KEY = st.secrets["COUPANG_ACCESS_KEY"]
+COUPANG_SECRET_KEY = st.secrets["COUPANG_SECRET_KEY"]
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# =========================
-# 페이지 설정
-# =========================
+COUPANG_DOMAIN = "https://api-gateway.coupang.com"
 
-st.set_page_config(
-    page_title="Threads AI 자동화",
-    page_icon="🔥",
-    layout="centered"
-)
-
-st.title("🔥 Threads AI 수익 자동화")
-
-st.write("광고티 없이 Threads 최적화 글 + 카드뉴스 생성")
-
-# =========================
-# 자동 키워드
-# =========================
-
-keywords = [
-    "차량용 쓰레기통",
-    "핸드폰 거치대",
-    "자취 꿀템",
-    "캠핑 랜턴",
-    "무선 청소기",
-    "차량 방향제",
-    "욕실 꿀템",
-    "미니 가습기",
-    "USB 선풍기",
-    "책상 정리함",
+KEYWORDS = [
+    "핸드폰 거치대", "자취 꿀템", "차량용 꿀템", "캠핑 꿀템",
+    "책상 정리템", "욕실 꿀템", "주방 신박템", "수납 정리함",
+    "미니 청소기", "LED 무드등", "무선 충전기", "차박 꿀템"
 ]
 
-# =========================
-# Threads 문체 생성
-# =========================
+def coupang_auth(method, path, query=""):
+    now = datetime.utcnow().strftime("%y%m%dT%H%M%SZ")
+    message = now + method + path + query
+    signature = hmac.new(
+        COUPANG_SECRET_KEY.encode("utf-8"),
+        message.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
 
-def make_thread(keyword):
+    return (
+        f"CEA algorithm=HmacSHA256, "
+        f"access-key={COUPANG_ACCESS_KEY}, "
+        f"signed-date={now}, "
+        f"signature={signature}"
+    )
 
+def make_coupang_search_url(keyword):
+    encoded = urllib.parse.quote(keyword)
+    return f"https://www.coupang.com/np/search?q={encoded}"
+
+def make_coupang_deeplink(coupang_url):
+    path = "/v2/providers/affiliate_open_api/apis/openapi/v1/deeplink"
+    url = COUPANG_DOMAIN + path
+
+    headers = {
+        "Authorization": coupang_auth("POST", path),
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "coupangUrls": [coupang_url]
+    }
+
+    try:
+        res = requests.post(url, headers=headers, data=json.dumps(payload), timeout=10)
+        data = res.json()
+
+        if "data" in data and len(data["data"]) > 0:
+            return data["data"][0].get("shortenUrl", coupang_url)
+
+        return coupang_url
+
+    except Exception:
+        return coupang_url
+
+def make_thread_text(keyword):
     prompt = f"""
-다음 조건으로 Threads 글 작성.
+너는 한국 Threads에서 자연스럽게 확산되는 글을 쓰는 전문가다.
 
-주제:
-{keyword}
+주제: {keyword}
 
 조건:
 - 광고 느낌 금지
-- 친구 추천 느낌
-- 실제 사용 후기 느낌
-- 저장하고 싶은 느낌
-- 공감 + 궁금증 유발
-- 너무 길지 않게
-- 100~180자
-- 이모지 1~2개
-- 자연스러운 한국인 말투
-
-절대 하지 말 것:
-- 인생템
-- 무조건 사세요
-- 링크 클릭
-- 광고 문구
+- 공감 + 궁금증 + 저장 욕구
+- 실제 사용 후기처럼 자연스럽게
+- 친구에게 말하듯이
+- 과장 금지
+- "사세요", "구매", "최저가", "인생템" 금지
+- 링크 언급 금지
+- 90~160자
+- 이모지는 최대 1개
 """
 
-    response = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
-    )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content.strip()
 
-    return response.choices[0].message.content
+    except Exception:
+        return f"{keyword}, 생각보다 생활에서 자주 쓰게 되는 물건이라 저장해두면 은근 도움 됩니다."
 
-# =========================
-# 카드뉴스 생성
-# =========================
+def get_korean_font(size):
+    font_paths = [
+        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "C:/Windows/Fonts/malgun.ttf"
+    ]
 
-def make_card(keyword, text):
+    for path in font_paths:
+        if os.path.exists(path):
+            return ImageFont.truetype(path, size)
 
-    img = Image.new("RGB", (1080, 1350), color=(10, 10, 15))
+    font_url = "https://github.com/google/fonts/raw/main/ofl/notosanskr/NotoSansKR%5Bwght%5D.ttf"
+    font_path = "NotoSansKR.ttf"
 
+    try:
+        if not os.path.exists(font_path):
+            r = requests.get(font_url, timeout=10)
+            with open(font_path, "wb") as f:
+                f.write(r.content)
+        return ImageFont.truetype(font_path, size)
+    except Exception:
+        return ImageFont.load_default()
+
+def make_card_news(keyword, thread_text):
+    width, height = 1080, 1350
+    img = Image.new("RGB", (width, height), (16, 17, 24))
     draw = ImageDraw.Draw(img)
 
-    title = f"🔥 {keyword}"
+    title_font = get_korean_font(72)
+    body_font = get_korean_font(48)
+    small_font = get_korean_font(34)
 
-    body = textwrap.fill(text, width=18)
+    draw.rounded_rectangle((50, 50, 1030, 1300), radius=42, fill=(28, 30, 42))
 
-    draw.text((60, 80), title, fill="white")
+    draw.text((90, 100), "오늘의 신박템", fill=(255, 210, 90), font=small_font)
+    draw.text((90, 180), keyword, fill=(255, 255, 255), font=title_font)
 
-    draw.text((60, 260), body, fill="white")
+    wrapped = textwrap.fill(thread_text, width=18)
+    draw.text((90, 360), wrapped, fill=(238, 238, 238), font=body_font, spacing=18)
 
-    filename = f"{keyword}.png"
+    draw.text((90, 1180), "저장해두면 은근 도움되는 생활 꿀템", fill=(180, 180, 190), font=small_font)
 
-    img.save(filename)
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
 
-    return filename
+    return img, buffer
 
-# =========================
-# UI
-# =========================
+st.set_page_config(page_title="Threads AI 수익 자동화", page_icon="🔥", layout="centered")
+
+st.title("🔥 Threads AI 수익 자동화")
+st.write("광고티 없이 Threads 최적화 글 + 쿠팡파트너스 딥링크 + 카드뉴스 생성")
 
 count = st.slider("자동 생성 개수", 1, 10, 3)
 
 if st.button("🚀 오늘의 Threads 자동 생성"):
+    selected_keywords = random.sample(KEYWORDS, count)
 
-    for i in range(count):
-
-        keyword = random.choice(keywords)
-
-        thread_text = make_thread(keyword)
-
-        # 쿠팡 검색 링크
-        coupang_url = (
-            "https://www.coupang.com/np/search?q="
-            + keyword
-        )
-
-        # 카드뉴스 생성
-        image_file = make_card(keyword, thread_text)
-
+    for keyword in selected_keywords:
         st.divider()
+
+        normal_url = make_coupang_search_url(keyword)
+        partner_url = make_coupang_deeplink(normal_url)
+
+        thread_text = make_thread_text(keyword)
+        card_img, card_buffer = make_card_news(keyword, thread_text)
 
         st.subheader(f"🔥 {keyword}")
 
-        st.text_area(
-            "Threads 본문",
-            thread_text,
-            height=160
-        )
+        st.text_area("Threads 본문", thread_text, height=160)
 
         st.text_area(
-            "댓글용 쿠팡 링크",
-            f"🔗 제품 정보\n{coupang_url}",
-            height=90
+            "댓글용 쿠팡파트너스 링크",
+            f"🔗 제품 정보\n{partner_url}\n\n※ 이 링크를 통해 구매 시 일정 수수료를 받을 수 있습니다.",
+            height=140
         )
 
-        st.image(image_file)
+        st.image(card_img)
 
-        with open(image_file, "rb") as file:
-            st.download_button(
-                label="📥 카드뉴스 다운로드",
-                data=file,
-                file_name=image_file,
-                mime="image/png"
-            )
+        st.download_button(
+            label="📥 카드뉴스 다운로드",
+            data=card_buffer,
+            file_name=f"{keyword}_cardnews.png",
+            mime="image/png"
+        )
 
-st.divider()
-
-st.caption("Threads AI 자동화 시스템")
+st.caption("Threads + 쿠팡파트너스 자동화 시스템")
