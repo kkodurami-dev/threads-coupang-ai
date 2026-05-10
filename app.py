@@ -72,7 +72,7 @@ def make_coupang_deeplink(coupang_url):
         return coupang_url
 
 def make_thread_text(keyword):
-st.write(thread_text)
+
     prompt = f"""
     당신은 Threads 바이럴 콘텐츠 전문가다.
 
@@ -86,7 +86,6 @@ st.write(thread_text)
     - 광고 티 금지
     - 과장 금지
     - 짧고 가독성 좋게
-    - Threads 스타일
 
     제품:
     {keyword}
@@ -107,7 +106,6 @@ st.write(thread_text)
     text = response.choices[0].message.content
 
     return str(text).strip()
-
 def get_korean_font(size):
     font_paths = [
         "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
