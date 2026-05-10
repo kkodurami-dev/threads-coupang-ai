@@ -8,67 +8,32 @@ import json
 import io
 import os
 import textwrap
-
 from datetime import datetime
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont
-
-# =========================
-# API KEYS
-# =========================
 
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 COUPANG_ACCESS_KEY = st.secrets["COUPANG_ACCESS_KEY"]
 COUPANG_SECRET_KEY = st.secrets["COUPANG_SECRET_KEY"]
 
 client = OpenAI(api_key=OPENAI_API_KEY)
-
 COUPANG_DOMAIN = "https://api-gateway.coupang.com"
 
-# =========================
-# DAILY LIFE TOPICS
-# =========================
-
 ITEMS = [
-    {
-        "keyword": "핸드폰 거치대",
-        "pain": "영상 보다 손목 아픈 사람",
-        "scene": "warm cozy bedroom at night, smartphone holder beside bed, soft lamp lighting, korean lifestyle, cinematic mood"
-    },
-
-    {
-        "keyword": "수납 정리함",
-        "pain": "방 정리가 자꾸 귀찮은 사람",
-        "scene": "minimal clean korean room, organized storage box, cozy lifestyle, warm natural lighting"
-    },
-
-    {
-        "keyword": "LED 무드등",
-        "pain": "방 분위기를 바꾸고 싶은 사람",
-        "scene": "dark cozy room with warm LED mood lamp, emotional korean interior, cinematic atmosphere"
-    },
-
-    {
-        "keyword": "미니 청소기",
-        "pain": "책상 먼지 신경 쓰이는 사람",
-        "scene": "clean desk setup, tiny vacuum cleaner, cozy korean workspace, warm tone"
-    },
-
-    {
-        "keyword": "차량용 꿀템",
-        "pain": "차 안이 자꾸 지저분해지는 사람",
-        "scene": "clean modern car interior, korean lifestyle item, cinematic sunlight"
-    },
+    {"keyword": "핸드폰 거치대", "pain": "영상 보다 손목 아픈 사람"},
+    {"keyword": "수납 정리함", "pain": "방 정리가 자꾸 귀찮은 사람"},
+    {"keyword": "미니 청소기", "pain": "책상 먼지 신경 쓰이는 사람"},
+    {"keyword": "차량용 수납함", "pain": "차 안이 자꾸 지저분해지는 사람"},
+    {"keyword": "욕실 정리템", "pain": "욕실 정리가 귀찮은 사람"},
+    {"keyword": "책상 정리템", "pain": "물건 찾느라 흐름 끊기는 사람"},
+    {"keyword": "주방 신박템", "pain": "요리보다 정리가 더 귀찮은 사람"},
+    {"keyword": "무선 충전기", "pain": "충전선 찾느라 짜증나는 사람"},
+    {"keyword": "LED 무드등", "pain": "방 분위기를 바꾸고 싶은 사람"},
+    {"keyword": "캠핑 랜턴", "pain": "짐 줄이고 편하게 캠핑 가고 싶은 사람"},
 ]
 
-# =========================
-# COUPANG AUTH
-# =========================
-
 def coupang_auth(method, path, query=""):
-
     now = datetime.utcnow().strftime("%y%m%dT%H%M%SZ")
-
     message = now + method + path + query
 
     signature = hmac.new(
@@ -84,19 +49,32 @@ def coupang_auth(method, path, query=""):
         f"signature={signature}"
     )
 
-# =========================
-# COUPANG DEEPLINK
-# =========================
+def search_coupang_product(keyword):
+    encoded = urllib.parse.quote(keyword)
+    path = "/v2/providers/affiliate_open_api/apis/openapi/products/search"
+    query = f"?keyword={encoded}&limit=10"
+    url = COUPANG_DOMAIN + path + query
 
-def make_coupang_deeplink(keyword):
+    headers = {
+        "Authorization": coupang_auth("GET", path, query),
+        "Content-Type": "application/json"
+    }
 
-    coupang_url = (
-        "https://www.coupang.com/np/search?q="
-        + urllib.parse.quote(keyword)
-    )
+    try:
+        res = requests.get(url, headers=headers, timeout=10)
+        data = res.json()
+        products = data.get("data", {}).get("productData", [])
 
+        if not products:
+            return None
+
+        return random.choice(products)
+
+    except Exception:
+        return None
+
+def make_coupang_deeplink_from_product_url(product_url):
     path = "/v2/providers/affiliate_open_api/apis/openapi/v1/deeplink"
-
     url = COUPANG_DOMAIN + path
 
     headers = {
@@ -105,147 +83,59 @@ def make_coupang_deeplink(keyword):
     }
 
     payload = {
-        "coupangUrls": [coupang_url]
+        "coupangUrls": [product_url]
     }
 
     try:
-
-        res = requests.post(
-            url,
-            headers=headers,
-            data=json.dumps(payload),
-            timeout=10
-        )
-
+        res = requests.post(url, headers=headers, data=json.dumps(payload), timeout=10)
         data = res.json()
 
         if "data" in data and len(data["data"]) > 0:
+            return data["data"][0].get("shortenUrl", product_url)
 
-            return data["data"][0].get(
-                "shortenUrl",
-                coupang_url
-            )
+        return product_url
 
     except Exception:
-        pass
-
-    return coupang_url
-
-# =========================
-# THREADS TEXT
-# =========================
+        return product_url
 
 def make_thread_text(keyword, pain):
-
     prompt = f"""
-너는 한국 Threads에서 활동하는
-감성 일상형 크리에이터다.
+너는 한국 Threads에서 자연스럽게 확산되는 '일상 공감형 글'을 쓰는 작가다.
 
-절대 광고처럼 쓰지 마라.
+주제 물건: {keyword}
+공감 대상: {pain}
 
-생활 속 작은 불편을 공감시키고,
-사람들이 "나도 그런데…" 라고 느끼게 만들어라.
+목표:
+제품을 파는 글이 아니라, 일상 속 작은 불편을 공감하게 만든다.
+댓글의 제품 정보가 자연스럽게 궁금해지게 작성한다.
 
-주제:
-{keyword}
-
-공감 대상:
-{pain}
-
-규칙:
-- 실제 사람이 쓴 듯한 자연스러운 말투
+조건:
+- 제품 추천 AI 느낌 금지
 - 광고 느낌 금지
-- 쇼핑몰 느낌 금지
+- 쇼핑몰 말투 금지
+- 공감 + 궁금증 + 저장 욕구 포함
+- 직접적인 구매 유도 금지
+- 링크 언급 금지
+- "사세요", "구매", "최저가", "인생템", "미쳤다", "대박" 금지
+- 이모지는 0~1개
 - 3~5문장
-- 저장하고 싶은 느낌
-- 댓글 달고 싶게
-- 이모지 최대 1개
-- "사세요"
-- "구매"
-- "최저가"
-- "인생템"
-- "대박"
-전부 금지
-
-좋은 느낌 예시:
-
-"요즘 이런 작은 불편이 은근 쌓이더라구요.
-별거 아닌데 반복되니까 꽤 피곤함…
-생활 동선 조금 편해지는 게 생각보다 크네요.
-나만 이런 거 느끼는 거 아니죠?"
-
-이 톤으로 작성해라.
+- 120~220자
+- 마지막은 댓글을 유도하는 자연스러운 문장
 """
 
     try:
-
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            temperature=0.9,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.85,
             max_tokens=220
         )
-
-        return str(
-            response.choices[0].message.content
-        ).strip()
+        return str(response.choices[0].message.content).strip()
 
     except Exception:
+        return f"{pain}이라면 이런 작은 불편이 은근히 반복되죠. 별거 아닌데 매일 쌓이면 꽤 피곤합니다. 생활 동선 조금 편해지는 게 생각보다 크더라고요. 비슷한 거 느끼는 분 있나요?"
 
-        return (
-            f"{pain}이라면 이런 작은 불편이 은근 반복되죠. "
-            "별거 아닌데 매일 겪다 보면 생각보다 피곤함… "
-            "생활 동선 조금 편해지는 게 꽤 크더라구요. "
-            "비슷한 거 느끼는 분 있나요?"
-        )
-
-# =========================
-# AI IMAGE
-# =========================
-
-def make_ai_image(scene):
-
-    try:
-
-        result = client.images.generate(
-            model="gpt-image-1",
-            prompt=f"""
-instagram threads lifestyle photography,
-korean emotional lifestyle,
-minimal aesthetic,
-warm cinematic lighting,
-soft shadows,
-natural realistic photo,
-NO text,
-NO watermark,
-high quality,
-{scene}
-""",
-            size="1024x1024"
-        )
-
-        image_base64 = result.data[0].b64_json
-
-        import base64
-
-        image_bytes = base64.b64decode(image_base64)
-
-        return Image.open(io.BytesIO(image_bytes))
-
-    except Exception:
-        return None
-
-# =========================
-# FONT
-# =========================
-
-def get_font(size):
-
+def get_korean_font(size):
     paths = [
         "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
@@ -253,33 +143,28 @@ def get_font(size):
     ]
 
     for p in paths:
-
         if os.path.exists(p):
-
             return ImageFont.truetype(p, size)
 
     return ImageFont.load_default()
 
-# =========================
-# CARD NEWS
-# =========================
+def download_product_image(url):
+    try:
+        res = requests.get(url, timeout=10)
+        return Image.open(io.BytesIO(res.content)).convert("RGB")
+    except Exception:
+        return None
 
 def make_card_news(keyword, thread_text):
+    thread_text = str(thread_text)
 
-    width = 1080
-    height = 1350
-
-    img = Image.new(
-        "RGB",
-        (width, height),
-        (18, 19, 27)
-    )
-
+    width, height = 1080, 1350
+    img = Image.new("RGB", (width, height), (18, 19, 27))
     draw = ImageDraw.Draw(img)
 
-    title_font = get_font(70)
-    body_font = get_font(44)
-    small_font = get_font(30)
+    title_font = get_korean_font(70)
+    body_font = get_korean_font(44)
+    small_font = get_korean_font(30)
 
     draw.rounded_rectangle(
         (60, 60, 1020, 1290),
@@ -301,10 +186,7 @@ def make_card_news(keyword, thread_text):
         font=title_font
     )
 
-    wrapped = textwrap.fill(
-        thread_text,
-        width=17
-    )
+    wrapped = textwrap.fill(thread_text, width=17)
 
     draw.text(
         (95, 360),
@@ -316,22 +198,16 @@ def make_card_news(keyword, thread_text):
 
     draw.text(
         (95, 1180),
-        "저장해두면 좋은 생활 아이디어",
+        "저장해두면 좋은 일상 아이디어",
         fill=(150, 150, 160),
         font=small_font
     )
 
     buffer = io.BytesIO()
-
     img.save(buffer, format="PNG")
-
     buffer.seek(0)
 
     return img, buffer
-
-# =========================
-# UI
-# =========================
 
 st.set_page_config(
     page_title="Daily Life Threads Studio",
@@ -340,81 +216,57 @@ st.set_page_config(
 )
 
 st.title("🔥 Daily Life Threads Studio")
+st.write("단일 상품 이미지 + 공감형 Threads 글 + 쿠팡파트너스 딥링크 + 카드뉴스 생성")
 
-st.write(
-    "감성 라이프스타일 이미지 + 공감형 Threads + 저장용 카드뉴스 생성"
-)
-
-count = st.slider(
-    "자동 생성 개수",
-    1,
-    10,
-    3
-)
-
-# =========================
-# BUTTON
-# =========================
+count = st.slider("자동 생성 개수", 1, 10, 3)
 
 if st.button("🚀 오늘의 Threads 생성"):
 
-    selected = random.sample(
-        ITEMS,
-        count
-    )
+    selected_items = random.sample(ITEMS, count)
 
-    for item in selected:
-
+    for item in selected_items:
         keyword = item["keyword"]
         pain = item["pain"]
-        scene = item["scene"]
 
-        thread_text = make_thread_text(
-            keyword,
-            pain
-        )
+        product = search_coupang_product(keyword)
 
-        partner_url = make_coupang_deeplink(
-            keyword
-        )
+        if product:
+            product_name = product.get("productName", keyword)
+            product_url = product.get("productUrl", "")
+            product_img_url = product.get("productImage", "")
 
-        ai_image = make_ai_image(
-            scene
-        )
+            if product_url:
+                partner_url = make_coupang_deeplink_from_product_url(product_url)
+            else:
+                partner_url = "상품 URL을 가져오지 못했습니다."
 
-        card_img, card_buffer = make_card_news(
-            keyword,
-            thread_text
-        )
+        else:
+            product_name = keyword
+            product_url = ""
+            product_img_url = ""
+            partner_url = "쿠팡 상품 검색에 실패했습니다."
+
+        thread_text = make_thread_text(keyword, pain)
+        card_img, card_buffer = make_card_news(keyword, thread_text)
 
         st.divider()
 
         st.subheader(f"🔥 {keyword}")
 
-        # =====================
-        # AI IMAGE
-        # =====================
+        st.caption(f"선택된 단일 상품: {product_name}")
 
-        if ai_image:
+        product_img = download_product_image(product_img_url)
 
-            st.image(
-                ai_image,
-                caption="감성 라이프스타일 이미지"
-            )
-
-        # =====================
-        # THREADS TEXT
-        # =====================
+        if product_img:
+            st.image(product_img, caption="단일 상품 이미지")
+        else:
+            st.info("상품 이미지를 불러오지 못했습니다. 카드뉴스만 생성됩니다.")
 
         st.text_area(
             "Threads 본문",
             thread_text,
             height=220
         )
-
-        # =====================
-        # CARD NEWS
-        # =====================
 
         st.image(
             card_img,
@@ -428,16 +280,10 @@ if st.button("🚀 오늘의 Threads 생성"):
             mime="image/png"
         )
 
-        # =====================
-        # COMMENT LINK
-        # =====================
-
         st.text_area(
-            "댓글용 쿠팡파트너스 링크",
-            f"참고했던 제품은 여기예요👇\n{partner_url}",
-            height=100
+            "댓글용 쿠팡파트너스 단일 상품 딥링크",
+            f"참고했던 제품은 여기예요👇\n{partner_url}\n\n※ 이 링크를 통해 구매 시 일정 수수료를 받을 수 있습니다.",
+            height=130
         )
 
-st.caption(
-    "Daily Life Threads Studio + Coupang Partners"
-)
+st.caption("Daily Life Threads Studio + Coupang Partners Deep Link")
