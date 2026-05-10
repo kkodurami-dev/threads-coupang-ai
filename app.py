@@ -117,7 +117,9 @@ def get_korean_font(size):
         return ImageFont.load_default()
 
 def make_card_news(keyword, thread_text):
-
+    
+    thread_text = str(thread_text)
+    
     width, height = 1080, 1350
 
     img = Image.new("RGB", (width, height), (16, 17, 24))
