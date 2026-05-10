@@ -117,19 +117,36 @@ def get_korean_font(size):
         return ImageFont.load_default()
 
 def make_card_news(keyword, thread_text):
+
     width, height = 1080, 1350
+
     img = Image.new("RGB", (width, height), (16, 17, 24))
+
     draw = ImageDraw.Draw(img)
 
     title_font = get_korean_font(72)
     body_font = get_korean_font(48)
     small_font = get_korean_font(34)
 
-    draw.rounded_rectangle((50, 50, 1030, 1300), radius=42, fill=(28, 30, 42))
+    draw.rounded_rectangle(
+        (50, 50, 1030, 1300),
+        radius=42,
+        fill=(28, 30, 42)
+    )
 
-        draw.text((90, 100), "생활 메모", fill=(210, 210, 210), font=small_font)
+    draw.text(
+        (90, 100),
+        "생활 메모",
+        fill=(210, 210, 210),
+        font=small_font
+    )
 
-    draw.text((90, 180), keyword, fill=(255, 255, 255), font=title_font)
+    draw.text(
+        (90, 180),
+        keyword,
+        fill=(255, 255, 255),
+        font=title_font
+    )
 
     wrapped = textwrap.fill(thread_text, width=18)
 
@@ -147,8 +164,11 @@ def make_card_news(keyword, thread_text):
         fill=(170, 170, 180),
         font=small_font
     )
+
     buffer = io.BytesIO()
+
     img.save(buffer, format="PNG")
+
     buffer.seek(0)
 
     return img, buffer
