@@ -73,31 +73,25 @@ def make_coupang_deeplink(coupang_url):
 
 def make_thread_text(keyword):
     prompt = f"""
-너는 한국 Threads에서 자연스럽게 확산되는 글을 쓰는 전문가다.
+너는 한국 Threads에서 자연스럽게 확산되는 생활정보 글을 쓰는 전문가다.
 
 주제: {keyword}
 
 조건:
 - 광고 느낌 금지
-- 공감 + 궁금증 + 저장 욕구
-- 실제 사용 후기처럼 자연스럽게
-- 친구에게 말하듯이
+- 존댓말 기반의 자연스러운 말투
+- 실제 사용 후기처럼 쓰되 너무 친한 반말 금지
+- 공감 + 궁금증 + 저장 욕구를 포함
 - 과장 금지
-- "사세요", "구매", "최저가", "인생템" 금지
+- "사세요", "구매", "최저가", "인생템", "미쳤다" 금지
 - 링크 언급 금지
-- 90~160자
-- 이모지는 최대 1개
+- 90~150자
+- 이모지 사용 금지
+- 정보 공유 느낌으로 작성
+
+예시 톤:
+자취할 때 이런 작은 정리용품 하나가 공간 활용을 꽤 바꿔줍니다. 물건을 한곳에 모아두기 쉬워져서 찾는 시간도 줄어드는 편입니다.
 """
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response.choices[0].message.content.strip()
-
-    except Exception:
-        return f"{keyword}, 생각보다 생활에서 자주 쓰게 되는 물건이라 저장해두면 은근 도움 됩니다."
 
 def get_korean_font(size):
     font_paths = [
@@ -133,13 +127,13 @@ def make_card_news(keyword, thread_text):
 
     draw.rounded_rectangle((50, 50, 1030, 1300), radius=42, fill=(28, 30, 42))
 
-    draw.text((90, 100), "오늘의 신박템", fill=(255, 210, 90), font=small_font)
+    draw.text((90, 100), "생활 메모", fill=(210, 210, 210), font=small_font)
     draw.text((90, 180), keyword, fill=(255, 255, 255), font=title_font)
 
     wrapped = textwrap.fill(thread_text, width=18)
     draw.text((90, 360), wrapped, fill=(238, 238, 238), font=body_font, spacing=18)
 
-    draw.text((90, 1180), "저장해두면 은근 도움되는 생활 꿀템", fill=(180, 180, 190), font=small_font)
+   draw.text((90, 1180), "나중에 참고하기 좋은 생활 아이디어", fill=(170, 170, 180), font=small_font)
 
     buffer = io.BytesIO()
     img.save(buffer, format="PNG")
