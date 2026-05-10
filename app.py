@@ -50,21 +50,21 @@ def make_thread_text(keyword, url):
 
     prompt = f'''
 다음 키워드 기반으로
-스레드 바이럴 스타일 글 작성.
+Threads 실제 후기 느낌의 자연스러운 글 작성.
 
 조건:
-- 초반 후킹 강하게
-- 짧고 중독성 있게
-- 실제 후기 느낌
-- 이모지 적당히 사용
-- 마지막에 클릭 유도
-- 120자 이내
+- 광고 느낌 금지
+- 친구에게 추천하는 말투
+- 과장 금지
+- 짧고 자연스럽게
+- 실사용 후기 느낌
+- 저장하고 싶은 정보 느낌
+- 이모지 최대 1~2개만
+- 링크 언급 금지
+- 80~140자
 
 키워드:
 {keyword}
-
-링크:
-{url}
 '''
 
     response = client.chat.completions.create(
@@ -117,12 +117,17 @@ if st.button("🚀 오늘의 신박템 자동 생성"):
         st.subheader(f"🔥 {keyword}")
 
         st.text_area(
-            "스레드 업로드용 글",
+            "스레드 본문 (게시용)",
             text,
             height=170
         )
 
-        st.code(url)
+        st.text_area(
+            "댓글용 링크",
+            f"🔗 제품 정보
+{url}",
+            height=100
+        )
 
 st.divider()
 
