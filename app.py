@@ -1,71 +1,78 @@
 import streamlit as st
 import random
-import urllib.parse
 from openai import OpenAI
+from PIL import Image, ImageDraw, ImageFont
+import textwrap
+import os
 
 # =========================
-# API KEY
+# API
 # =========================
+
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 # =========================
-# 자동 키워드 리스트
+# 페이지 설정
 # =========================
-AUTO_KEYWORDS = [
-    "차량용 꿀템",
-    "캠핑 꿀템",
-    "자취 꿀템",
-    "책상 정리 꿀템",
-    "LED 무드등",
-    "미니 청소기",
-    "무선 충전기",
-    "차박 꿀템",
-    "주방 신박템",
-    "욕실 꿀템",
-    "생활 편의템",
-    "수납 정리함",
-    "집들이 선물",
-    "직장인 책상템",
-    "겨울 난방템",
-    "여름 냉방템",
+
+st.set_page_config(
+    page_title="Threads AI 자동화",
+    page_icon="🔥",
+    layout="centered"
+)
+
+st.title("🔥 Threads AI 수익 자동화")
+
+st.write("광고티 없이 Threads 최적화 글 + 카드뉴스 생성")
+
+# =========================
+# 자동 키워드
+# =========================
+
+keywords = [
+    "차량용 쓰레기통",
     "핸드폰 거치대",
-    "블루투스 스피커",
-    "생활 아이디어 상품",
-    "다이소 감성템"
+    "자취 꿀템",
+    "캠핑 랜턴",
+    "무선 청소기",
+    "차량 방향제",
+    "욕실 꿀템",
+    "미니 가습기",
+    "USB 선풍기",
+    "책상 정리함",
 ]
 
 # =========================
-# 쿠팡 검색 URL 생성
+# Threads 문체 생성
 # =========================
-def make_coupang_search_url(keyword):
-    encoded = urllib.parse.quote(keyword)
-    return f"https://www.coupang.com/np/search?q={encoded}"
 
-# =========================
-# AI 스레드 문구 생성
-# =========================
-def make_thread_text(keyword, url):
+def make_thread(keyword):
 
-    prompt = f'''
-다음 키워드 기반으로
-Threads 실제 후기 느낌의 자연스러운 글 작성.
+    prompt = f"""
+다음 조건으로 Threads 글 작성.
+
+주제:
+{keyword}
 
 조건:
 - 광고 느낌 금지
-- 친구에게 추천하는 말투
-- 과장 금지
-- 짧고 자연스럽게
-- 실사용 후기 느낌
-- 저장하고 싶은 정보 느낌
-- 이모지 최대 1~2개만
-- 링크 언급 금지
-- 80~140자
+- 친구 추천 느낌
+- 실제 사용 후기 느낌
+- 저장하고 싶은 느낌
+- 공감 + 궁금증 유발
+- 너무 길지 않게
+- 100~180자
+- 이모지 1~2개
+- 자연스러운 한국인 말투
 
-키워드:
-{keyword}
-'''
+절대 하지 말 것:
+- 인생템
+- 무조건 사세요
+- 링크 클릭
+- 광고 문구
+"""
 
     response = client.chat.completions.create(
         model="gpt-4.1-mini",
@@ -77,57 +84,78 @@ Threads 실제 후기 느낌의 자연스러운 글 작성.
     return response.choices[0].message.content
 
 # =========================
-# 페이지 UI
+# 카드뉴스 생성
 # =========================
-st.set_page_config(
-    page_title="AI 신박템 생성기",
-    page_icon="🔥",
-    layout="centered"
-)
 
-st.title("🔥 AI 신박템 생성기")
+def make_card(keyword, text):
 
-st.write("버튼만 누르면 AI가 자동으로 오늘의 신박템 스레드 글 생성")
+    img = Image.new("RGB", (1080, 1350), color=(10, 10, 15))
 
-count = st.slider(
-    "자동 생성 개수",
-    1,
-    10,
-    5
-)
+    draw = ImageDraw.Draw(img)
+
+    title = f"🔥 {keyword}"
+
+    body = textwrap.fill(text, width=18)
+
+    draw.text((60, 80), title, fill="white")
+
+    draw.text((60, 260), body, fill="white")
+
+    filename = f"{keyword}.png"
+
+    img.save(filename)
+
+    return filename
 
 # =========================
-# 생성 버튼
+# UI
 # =========================
-if st.button("🚀 오늘의 신박템 자동 생성"):
 
-    selected_keywords = random.sample(AUTO_KEYWORDS, count)
+count = st.slider("자동 생성 개수", 1, 10, 3)
 
-    for keyword in selected_keywords:
+if st.button("🚀 오늘의 Threads 자동 생성"):
 
-        url = make_coupang_search_url(keyword)
+    for i in range(count):
 
-        try:
-            text = make_thread_text(keyword, url)
-        except:
-            text = f"🔥 요즘 난리난 {keyword}\n\n👉 {url}"
+        keyword = random.choice(keywords)
+
+        thread_text = make_thread(keyword)
+
+        # 쿠팡 검색 링크
+        coupang_url = (
+            "https://www.coupang.com/np/search?q="
+            + keyword
+        )
+
+        # 카드뉴스 생성
+        image_file = make_card(keyword, thread_text)
 
         st.divider()
 
         st.subheader(f"🔥 {keyword}")
 
         st.text_area(
-            "스레드 본문 (게시용)",
-            text,
-            height=170
+            "Threads 본문",
+            thread_text,
+            height=160
         )
 
         st.text_area(
-    "댓글용 링크",
-    f"🔗 제품 정보\n{url}",
-    height=100
-)
+            "댓글용 쿠팡 링크",
+            f"🔗 제품 정보\n{coupang_url}",
+            height=90
+        )
+
+        st.image(image_file)
+
+        with open(image_file, "rb") as file:
+            st.download_button(
+                label="📥 카드뉴스 다운로드",
+                data=file,
+                file_name=image_file,
+                mime="image/png"
+            )
 
 st.divider()
 
-st.caption("Threads + 쿠팡파트너스 자동화 시스템")
+st.caption("Threads AI 자동화 시스템")
